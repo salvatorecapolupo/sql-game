@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SQL Puzzle (italiano)</title>
+  <title>SQL Puzzle Avanzato</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -37,21 +37,24 @@
     }
     .block-bank, .drop-zone {
       display: flex;
-      flex-wrap: nowrap;
-      overflow-x: auto;
+      flex-wrap: nowrap; /* solo linea orizzontale */
       gap: 0.5rem;
       margin: 1rem 0;
-      min-height: 80px;
+      min-height: 50px;
       padding: 0.5rem;
       border-radius: 8px;
+      overflow-x: auto;
     }
     .block-bank {
       background: #e3f2fd;
       border: 2px solid #64b5f6;
+      cursor: grab;
     }
     .drop-zone {
       background: #fff3e0;
       border: 2px dashed #ffa726;
+      cursor: default;
+      min-height: 60px;
     }
     .block {
       padding: 0.5rem 1rem;
@@ -61,8 +64,9 @@
       cursor: grab;
       user-select: none;
       font-weight: bold;
-      flex: 0 0 auto;
+      white-space: nowrap;
       transition: transform 0.2s ease;
+      flex-shrink: 0;
     }
     .block:focus, .block:hover {
       outline: 3px solid #ffca28;
@@ -74,6 +78,8 @@
       border-radius: 5px;
       white-space: pre-wrap;
       margin-top: 1rem;
+      min-height: 50px;
+      font-style: italic;
     }
     button {
       padding: 0.75rem 1.5rem;
@@ -83,14 +89,14 @@
       border-radius: 5px;
       cursor: pointer;
       font-size: 1rem;
+      margin-top: 1rem;
     }
     button:hover {
       background: #0d47a1;
     }
     @media (max-width: 600px) {
       .block-bank, .drop-zone {
-        flex-direction: column;
-        overflow-x: unset;
+        flex-wrap: wrap;
       }
     }
   </style>
@@ -117,13 +123,13 @@
       {
         id: 2,
         sentence: "Mostra i clienti che vivono a Milano.",
-        words: shuffle(["SELECT", "nome", ",", "cognome", "FROM", "clienti", "WHERE", "città", "=", "'Milano'"]) ,
+        words: shuffle(["SELECT", "nome", ",", "cognome", "FROM", "clienti", "WHERE", "città", "=", "'Milano'"]),
         correct: ["SELECT", "nome", ",", "cognome", "FROM", "clienti", "WHERE", "città", "=", "'Milano'"]
       }
     ];
 
     function shuffle(array) {
-      return array.map(v => [Math.random(), v]).sort().map(a => a[1]);
+      return array.sort(() => Math.random() - 0.5);
     }
 
     let currentLevel = 0;
@@ -138,62 +144,60 @@
         <h2>Livello ${level.id}</h2>
         <p><strong>Obiettivo:</strong></p>
         <div class="output" id="objective-${level.id}">${level.sentence}</div>
-        <div class="block-bank" id="bank-${level.id}"></div>
-        <div class="drop-zone" id="drop-${level.id}"></div>
+        <div class="block-bank" id="bank-${level.id}" ondrop="onDrop(event)" ondragover="event.preventDefault()"></div>
+        <div class="drop-zone" id="drop-${level.id}" ondrop="onDrop(event)" ondragover="event.preventDefault()"></div>
+        <div class="output" id="explanation-${level.id}">Stai dicendo: ...</div>
         <button onclick="checkLevel(${level.id})">Verifica</button>
         <div class="output" id="output-${level.id}"></div>
       `;
       document.getElementById("levels").appendChild(div);
 
       level.words.forEach(word => {
-        const el = createBlock(level.id, word);
+        const el = document.createElement("div");
+        el.className = "block";
+        el.textContent = word;
+        el.dataset.word = word;
+        el.setAttribute("draggable", true);
+        el.setAttribute("id", `block-${level.id}-${word}-${Math.random()}`);
+        el.addEventListener("dragstart", onDragStart);
+        el.addEventListener("dragend", onDragEnd);
         document.getElementById(`bank-${level.id}`).appendChild(el);
       });
-
-      const dropZone = document.getElementById(`drop-${level.id}`);
-      const bank = document.getElementById(`bank-${level.id}`);
-      [dropZone, bank].forEach(container => {
-        container.addEventListener("dragstart", onDragStart);
-        container.addEventListener("dragover", onDragOver);
-        container.addEventListener("drop", onDrop);
-      });
-    }
-
-    function createBlock(levelId, word) {
-      const el = document.createElement("div");
-      el.className = "block";
-      el.textContent = word;
-      el.dataset.word = word;
-      el.setAttribute("draggable", true);
-      el.setAttribute("id", `block-${levelId}-${word}-${Math.random()}`);
-      return el;
     }
 
     function onDragStart(e) {
       e.dataTransfer.setData("text/plain", e.target.id);
+      e.target.classList.add("dragging");
     }
 
-    function onDragOver(e) {
-      e.preventDefault();
-      const draggingEl = document.getElementById(e.dataTransfer.getData("text/plain"));
-      const target = e.target;
-      if (target.classList.contains("block") && target !== draggingEl) {
-        const container = target.parentElement;
-        container.insertBefore(draggingEl, target);
-      }
+    function onDragEnd(e) {
+      e.target.classList.remove("dragging");
     }
 
     function onDrop(e) {
       e.preventDefault();
       const id = e.dataTransfer.getData("text/plain");
-      const el = document.getElementById(id);
-      const target = e.target;
-      if (!el) return;
-      if (target.classList.contains("drop-zone") || target.classList.contains("block-bank")) {
-        target.appendChild(el);
+      const draggedEl = document.getElementById(id);
+      if (!draggedEl) return;
+
+      // blocchi unici, si spostano da un contenitore all'altro senza duplicati
+      // se si drop su un block, inserisco prima o dopo in base alla posizione del mouse
+      if (e.target.classList.contains("block")) {
+        const parent = e.target.parentNode;
+        const rect = e.target.getBoundingClientRect();
+        const after = (e.clientX - rect.left) > (rect.width / 2);
+        if (after) {
+          parent.insertBefore(draggedEl, e.target.nextSibling);
+        } else {
+          parent.insertBefore(draggedEl, e.target);
+        }
+      } else if (e.target.classList.contains("block-bank") || e.target.classList.contains("drop-zone")) {
+        e.target.appendChild(draggedEl);
       }
       updateExplanation();
     }
+
+    levels.forEach(createLevel);
 
     function checkLevel(id) {
       const level = levels.find(l => l.id === id);
@@ -207,7 +211,8 @@
     function updateExplanation() {
       const level = levels[currentLevel];
       const drops = Array.from(document.getElementById(`drop-${level.id}`).children).map(e => e.dataset.word);
-      document.getElementById(`objective-${level.id}`).innerText = `Stai dicendo: ${explainQuery(drops)}`;
+      const explanationEl = document.getElementById(`explanation-${level.id}`);
+      explanationEl.innerText = "Stai dicendo: " + explainQuery(drops);
     }
 
     function explainQuery(words) {
@@ -231,7 +236,8 @@
       }
     }
 
-    levels.forEach(createLevel);
+    // inizializzo explanation per il primo livello
+    updateExplanation();
   </script>
 </body>
 </html>
