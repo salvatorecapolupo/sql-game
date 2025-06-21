@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SQL Puzzle (italiano)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      color: #212121;
+    }
+    header {
+      background: #1565c0;
+      color: white;
+      text-align: center;
+      padding: 1rem;
+    }
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 1rem;
+    }
+    .level {
+      display: none;
+      background: white;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .level.active {
+      display: block;
+    }
+    .block-bank, .drop-zone {
+      display: flex;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 0.5rem;
+      margin: 1rem 0;
+      min-height: 80px;
+      padding: 0.5rem;
+      border-radius: 8px;
+    }
+    .block-bank {
+      background: #e3f2fd;
+      border: 2px solid #64b5f6;
+    }
+    .drop-zone {
+      background: #fff3e0;
+      border: 2px dashed #ffa726;
+    }
+    .block {
+      padding: 0.5rem 1rem;
+      background: #ffffff;
+      border: 2px solid #1976d2;
+      border-radius: 8px;
+      cursor: grab;
+      user-select: none;
+      font-weight: bold;
+      flex: 0 0 auto;
+      transition: transform 0.2s ease;
+    }
+    .block:focus, .block:hover {
+      outline: 3px solid #ffca28;
+      transform: scale(1.05);
+    }
+    .output {
+      background: #eeeeee;
+      padding: 1rem;
+      border-radius: 5px;
+      white-space: pre-wrap;
+      margin-top: 1rem;
+    }
+    button {
+      padding: 0.75rem 1.5rem;
+      background: #1565c0;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background: #0d47a1;
+    }
+    @media (max-width: 600px) {
+      .block-bank, .drop-zone {
+        flex-direction: column;
+        overflow-x: unset;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SQL Puzzle Avanzato</h1>
+  </header>
+  <div class="container">
+    <div id="levels"></div>
+    <div style="text-align: center">
+      <button onclick="nextLevel()">Livello successivo</button>
+    </div>
+  </div>
+
+  <script>
+    const levels = [
+      {
+        id: 1,
+        sentence: "Mostra i nomi e i cognomi di tutti i clienti registrati.",
+        words: shuffle(["SELECT", "nome", ",", "cognome", "FROM", "clienti"]),
+        correct: ["SELECT", "nome", ",", "cognome", "FROM", "clienti"]
+      },
+      {
+        id: 2,
+        sentence: "Mostra i clienti che vivono a Milano.",
+        words: shuffle(["SELECT", "nome", ",", "cognome", "FROM", "clienti", "WHERE", "città", "=", "'Milano'"]) ,
+        correct: ["SELECT", "nome", ",", "cognome", "FROM", "clienti", "WHERE", "città", "=", "'Milano'"]
+      }
+    ];
+
+    function shuffle(array) {
+      return array.map(v => [Math.random(), v]).sort().map(a => a[1]);
+    }
+
+    let currentLevel = 0;
+
+    function createLevel(level) {
+      const div = document.createElement("div");
+      div.className = "level";
+      if (level.id === 1) div.classList.add("active");
+      div.id = `level-${level.id}`;
+
+      div.innerHTML = `
+        <h2>Livello ${level.id}</h2>
+        <p><strong>Obiettivo:</strong></p>
+        <div class="output" id="objective-${level.id}">${level.sentence}</div>
+        <div class="block-bank" id="bank-${level.id}"></div>
+        <div class="drop-zone" id="drop-${level.id}"></div>
+        <button onclick="checkLevel(${level.id})">Verifica</button>
+        <div class="output" id="output-${level.id}"></div>
+      `;
+      document.getElementById("levels").appendChild(div);
+
+      level.words.forEach(word => {
+        const el = createBlock(level.id, word);
+        document.getElementById(`bank-${level.id}`).appendChild(el);
+      });
+
+      const dropZone = document.getElementById(`drop-${level.id}`);
+      const bank = document.getElementById(`bank-${level.id}`);
+      [dropZone, bank].forEach(container => {
+        container.addEventListener("dragstart", onDragStart);
+        container.addEventListener("dragover", onDragOver);
+        container.addEventListener("drop", onDrop);
+      });
+    }
+
+    function createBlock(levelId, word) {
+      const el = document.createElement("div");
+      el.className = "block";
+      el.textContent = word;
+      el.dataset.word = word;
+      el.setAttribute("draggable", true);
+      el.setAttribute("id", `block-${levelId}-${word}-${Math.random()}`);
+      return el;
+    }
+
+    function onDragStart(e) {
+      e.dataTransfer.setData("text/plain", e.target.id);
+    }
+
+    function onDragOver(e) {
+      e.preventDefault();
+      const draggingEl = document.getElementById(e.dataTransfer.getData("text/plain"));
+      const target = e.target;
+      if (target.classList.contains("block") && target !== draggingEl) {
+        const container = target.parentElement;
+        container.insertBefore(draggingEl, target);
+      }
+    }
+
+    function onDrop(e) {
+      e.preventDefault();
+      const id = e.dataTransfer.getData("text/plain");
+      const el = document.getElementById(id);
+      const target = e.target;
+      if (!el) return;
+      if (target.classList.contains("drop-zone") || target.classList.contains("block-bank")) {
+        target.appendChild(el);
+      }
+      updateExplanation();
+    }
+
+    function checkLevel(id) {
+      const level = levels.find(l => l.id === id);
+      const drops = Array.from(document.getElementById(`drop-${id}`).children).map(e => e.dataset.word);
+      const isCorrect = JSON.stringify(drops) === JSON.stringify(level.correct);
+      document.getElementById(`output-${id}`).innerText = isCorrect
+        ? `✅ Corretto!`
+        : `❌ Qualcosa non va. Riprova.`;
+    }
+
+    function updateExplanation() {
+      const level = levels[currentLevel];
+      const drops = Array.from(document.getElementById(`drop-${level.id}`).children).map(e => e.dataset.word);
+      document.getElementById(`objective-${level.id}`).innerText = `Stai dicendo: ${explainQuery(drops)}`;
+    }
+
+    function explainQuery(words) {
+      const joined = words.join(" ");
+      if (joined === "SELECT nome FROM clienti") return "Mostra i nomi dei clienti.";
+      if (joined === "SELECT nome , cognome FROM clienti") return "Mostra i nomi e cognomi dei clienti.";
+      if (joined === "SELECT nome , cognome FROM clienti WHERE città = 'Milano'") return "Mostra i clienti che vivono a Milano.";
+      return "Composizione parziale: " + joined;
+    }
+
+    function nextLevel() {
+      const oldLevel = document.getElementById(`level-${levels[currentLevel].id}`);
+      if (currentLevel < levels.length - 1) {
+        currentLevel++;
+        const newLevel = document.getElementById(`level-${levels[currentLevel].id}`);
+        oldLevel.classList.remove("active");
+        newLevel.classList.add("active");
+        updateExplanation();
+      } else {
+        alert("Hai completato tutti i livelli! 🎉");
+      }
+    }
+
+    levels.forEach(createLevel);
+  </script>
+</body>
+</html>
